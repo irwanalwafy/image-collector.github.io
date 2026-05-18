@@ -185,6 +185,14 @@ label.btn input[type=file]{display:none;}
         </div>
         <div class="queue-strip" id="queueStrip"></div>
       </div>
+
+      <div class="card" style="margin-top:16px;">
+        <div class="sec-title">Scan Barcode</div>
+        <p style="margin:0 0 10px;color:var(--text3);font-size:13px;">Gunakan tombol ini untuk memindai barcode/QR dari foto yang dipilih.</p>
+        <button class="btn full" id="btnScanBarcode" disabled>🔍 Scan Barcode</button>
+        <textarea id="barcodeResult" readonly placeholder="Hasil scan akan muncul di sini..." style="width:100%;min-height:110px;margin-top:12px;border:1px solid var(--border);border-radius:14px;padding:12px;background:var(--surface2);color:var(--text);resize:vertical;font-size:14px;line-height:1.5;"></textarea>
+        <button class="btn full success" id="btnDownloadBarcodeTxt" disabled style="margin-top:10px;">💾 Simpan Hasil ke TXT</button>
+      </div>
     </div>
 
     <!-- PAGE EDIT -->
@@ -360,6 +368,9 @@ const queueStrip2=document.getElementById('queueStrip2');
 const queueLabel=document.getElementById('queueLabel');
 const queueLabel2=document.getElementById('queueLabel2');
 const clearQueueBtn=document.getElementById('clearQueueBtn');
+const btnScanBarcode=document.getElementById('btnScanBarcode');
+const barcodeResult=document.getElementById('barcodeResult');
+const btnDownloadBarcodeTxt=document.getElementById('btnDownloadBarcodeTxt');
 const btnApplyOne=document.getElementById('btnApplyOne');
 const btnApplyAll=document.getElementById('btnApplyAll');
 const btnSaveOne=document.getElementById('btnSaveOne');
@@ -658,8 +669,78 @@ function doDownload(src){
   document.body.appendChild(a);a.click();document.body.removeChild(a);
   addToGallery(src,fn);
 }
-function setBusy(b){[btnApplyOne,btnApplyAll,btnSaveOne,btnSaveAll].forEach(el=>el.disabled=b||!queue.length);}
-function syncButtons(){const has=queue.length>0;[btnApplyOne,btnApplyAll,btnSaveOne,btnSaveAll].forEach(el=>el.disabled=!has);}
+function setBusy(b){[btnApplyOne,btnApplyAll,btnSaveOne,btnSaveAll,btnScanBarcode,btnDownloadBarcodeTxt].forEach(el=>el.disabled=b||!queue.length);}
+function syncButtons(){
+  const has=queue.length>0;
+  [btnApplyOne,btnApplyAll,btnSaveOne,btnSaveAll,btnScanBarcode].forEach(el=>el.disabled=!has);
+  if(!has){
+    barcodeResult.value='';
+    btnDownloadBarcodeTxt.disabled=true;
+  }
+}
+
+async function scanBarcode(){
+  if(!queue.length){
+    toast('Pilih atau ambil gambar terlebih dahulu.');
+    return;
+  }
+  const item=queue[activeIdx>=0?activeIdx:0];
+  const src=item.processedSrc||item.originalSrc;
+  const img=new Image();
+  img.crossOrigin='anonymous';
+  img.onload=async()=>{
+    const off=document.createElement('canvas');
+    off.width=img.width; off.height=img.height;
+    const offCtx=off.getContext('2d');
+    offCtx.drawImage(img,0,0);
+    if(!('BarcodeDetector' in window)){
+      barcodeResult.value='Pemindaian tidak tersedia pada browser ini.';
+      btnDownloadBarcodeTxt.disabled=true;
+      toast('Browser tidak mendukung BarcodeDetector.');
+      return;
+    }
+    try{
+      const detector=new BarcodeDetector({formats:['qr_code','ean_13','ean_8','code_128','code_39','code_93','upc_e','upc_a','pdf417','aztec','itf']});
+      const results=await detector.detect(off);
+      if(!results.length){
+        barcodeResult.value='Tidak ditemukan barcode/QR code.';
+        btnDownloadBarcodeTxt.disabled=true;
+        toast('Tidak ada barcode terdeteksi.');
+        return;
+      }
+      let text='';
+      results.forEach((res,i)=>{
+        text += `Hasil ${i+1} (${res.format}):\n${res.rawValue}\n\n`;
+      });
+      barcodeResult.value=text.trim();
+      btnDownloadBarcodeTxt.disabled=false;
+      toast(`${results.length} barcode ditemukan.`);
+    }catch(err){
+      barcodeResult.value='Terjadi kesalahan pemindaian: '+err.message;
+      btnDownloadBarcodeTxt.disabled=true;
+      toast('Gagal memindai barcode.');
+    }
+  };
+  img.src=src;
+}
+
+function downloadBarcodeTxt(){
+  const text=barcodeResult.value.trim();
+  if(!text){
+    toast('Tidak ada teks barcode untuk disimpan.');
+    return;
+  }
+  const blob=new Blob([text],{type:'text/plain'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;
+  a.download=`barcode_${Date.now()}.txt`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast('Hasil barcode disimpan ke TXT.');
+}
 
 // FILE INPUTS — sequential read
 async function handleInput(inp){
@@ -677,6 +758,8 @@ handleInput(capFront);
 handleInput(fileInput);
 
 clearQueueBtn.addEventListener('click',()=>{queue=[];activeIdx=-1;showEmpty();syncButtons();toast('Antrian dikosongkan.');});
+btnScanBarcode.addEventListener('click',scanBarcode);
+btnDownloadBarcodeTxt.addEventListener('click',downloadBarcodeTxt);
 
 // LOGO
 logoInput.addEventListener('change',()=>{
@@ -719,6 +802,7 @@ function addToGallery(dataURL,filename){
   galleryGrid.appendChild(div);
 }
 
+syncButtons();
 if('serviceWorker' in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});
 </script>
 </body>
