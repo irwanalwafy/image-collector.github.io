@@ -212,8 +212,8 @@ label.btn input[type=file]{display:none;}
       <div class="batch-grid">
         <button class="btn sm" id="btnApplyOne" disabled>✨ Terapkan Ini</button>
         <button class="btn sm primary" id="btnApplyAll" disabled>✨ Terapkan Semua</button>
-        <button class="btn sm" id="btnSaveOne" disabled>💾 Simpan Ini</button>
-        <button class="btn sm success" id="btnSaveAll" disabled>💾 Simpan Semua</button>
+        <button class="btn sm" id="btnSaveOne" disabled>� Tambahkan ke Galeri</button>
+        <button class="btn sm success" id="btnSaveAll" disabled>📁 Tambahkan Semua ke Galeri</button>
       </div>
 
       <div class="progress-wrap" id="progressWrap">
@@ -326,6 +326,10 @@ label.btn input[type=file]{display:none;}
 
     <!-- PAGE GALERI -->
     <div class="page" id="page-galeri">
+      <div class="batch-grid" style="margin-bottom:10px;">
+        <button class="btn sm success" id="btnGallerySaveAll" disabled>💾 Simpan Semua</button>
+        <button class="btn sm primary" id="btnGalleryShare" disabled>📤 Share</button>
+      </div>
       <div id="galleryEmpty" class="gallery-empty">
         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
         Belum ada foto tersimpan.
@@ -375,6 +379,8 @@ const btnApplyOne=document.getElementById('btnApplyOne');
 const btnApplyAll=document.getElementById('btnApplyAll');
 const btnSaveOne=document.getElementById('btnSaveOne');
 const btnSaveAll=document.getElementById('btnSaveAll');
+const btnGallerySaveAll=document.getElementById('btnGallerySaveAll');
+const btnGalleryShare=document.getElementById('btnGalleryShare');
 const progressWrap=document.getElementById('progressWrap');
 const progressFill=document.getElementById('progressFill');
 const progressLbl=document.getElementById('progressLbl');
@@ -631,45 +637,76 @@ async function applyToAll(){
 }
 
 function saveActive(){
-  if(activeIdx<0)return;
-  const item=queue[activeIdx];
-  doDownload(item.processedSrc||mainCanvas.toDataURL('image/jpeg',0.92));
-  item.done=true;renderQueue();
+  if(activeIdx<0||!queue[activeIdx])return;
+  moveQueueItemToGallery(activeIdx);
 }
 
 async function saveAll(){
-  if(busy||!queue.length)return;
-  busy=true;setBusy(true);progressWrap.classList.add('show');
-  for(let i=0;i<queue.length;i++){
-    const item=queue[i];let src=item.processedSrc;
-    if(!src){
-      await new Promise(res=>{
-        const img=new Image();
-        img.onload=()=>{
-          const oc=document.createElement('canvas');oc.width=img.width;oc.height=img.height;
-          const oCtx=oc.getContext('2d');oCtx.drawImage(img,0,0);
-          drawWM(oCtx,img.width,img.height);src=oc.toDataURL('image/jpeg',0.92);item.processedSrc=src;res();
-        };img.src=item.originalSrc;
-      });
-    }
-    doDownload(src);item.done=true;
-    progressFill.style.width=Math.round(((i+1)/queue.length)*100)+'%';
-    progressLbl.textContent=`Menyimpan ${i+1} / ${queue.length}`;
-    await new Promise(r=>setTimeout(r,220));
-  }
-  busy=false;setBusy(false);renderQueue();
-  toast(`${queue.length} gambar berhasil disimpan ✓`);
-  setTimeout(()=>progressWrap.classList.remove('show'),2500);
+  if(!queue.length)return;
+  moveAllQueueToGallery();
 }
 
-function doDownload(src){
-  savedCount++;
-  const fn=`koleksi_${savedCount}_${Date.now()}.jpg`;
-  const a=document.createElement('a');a.href=src;a.download=fn;
+function downloadDataURL(src,filename){
+  const a=document.createElement('a');a.href=src;a.download=filename;
   document.body.appendChild(a);a.click();document.body.removeChild(a);
-  addToGallery(src,fn);
 }
-function setBusy(b){[btnApplyOne,btnApplyAll,btnSaveOne,btnSaveAll,btnScanBarcode,btnDownloadBarcodeTxt].forEach(el=>el.disabled=b||!queue.length);}
+
+function moveQueueItemToGallery(index){
+  const item=queue[index];
+  if(!item)return;
+  const src=item.processedSrc||item.originalSrc;
+  const filename=`galeri_${Date.now()}_${index+1}.jpg`;
+  addToGallery(src,filename,false);
+  queue.splice(index,1);
+  if(queue.length===0){activeIdx=-1;showEmpty();}
+  else if(activeIdx>=queue.length){activeIdx=queue.length-1;loadToCanvas(queue[activeIdx].originalSrc);}
+  else if(activeIdx===index){loadToCanvas(queue[activeIdx].originalSrc);}
+  renderQueue();syncButtons();
+  toast('Gambar dipindahkan ke Galeri.');
+}
+
+function moveAllQueueToGallery(){
+  if(!queue.length)return;
+  const now=Date.now();
+  queue.forEach((item,i)=>{
+    const src=item.processedSrc||item.originalSrc;
+    const filename=`galeri_${now}_${i+1}.jpg`;
+    addToGallery(src,filename,false);
+  });
+  queue=[];activeIdx=-1;showEmpty();syncButtons();
+  toast('Semua gambar dipindahkan ke Galeri.');
+}
+
+function saveAllGallery(){
+  if(!gallery.length)return;
+  gallery.forEach(item=>downloadDataURL(item.dataURL,item.filename));
+  toast(`${gallery.length} gambar diunduh dari Galeri.`);
+}
+
+async function shareGallery(){
+  if(!gallery.length){toast('Galeri kosong.');return;}
+  if(!navigator.share){toast('Share tidak tersedia di perangkat ini.');return;}
+  try{
+    const files = await Promise.all(gallery.map(item=>{
+      const base64 = item.dataURL.split(',')[1];
+      const bytes = atob(base64);
+      const buf = new ArrayBuffer(bytes.length);
+      const arr = new Uint8Array(buf);
+      for(let j=0;j<bytes.length;j++)arr[j]=bytes.charCodeAt(j);
+      return new File([buf], item.filename, {type:'image/jpeg'});
+    }));
+    if(navigator.canShare && navigator.canShare({files})){
+      await navigator.share({files, title:'Galeri Image Collector', text:`Berbagi ${gallery.length} gambar dari Galeri.`});
+    } else {
+      await navigator.share({title:'Galeri Image Collector', text:`Galeri berisi ${gallery.length} gambar.`});
+    }
+  }catch(err){toast('Gagal share: '+err.message);}
+}
+
+function setBusy(b){
+  [btnApplyOne,btnApplyAll,btnSaveOne,btnSaveAll,btnScanBarcode,btnDownloadBarcodeTxt].forEach(el=>el.disabled=b||!queue.length);
+  [btnGallerySaveAll,btnGalleryShare].forEach(el=>el.disabled=b||!gallery.length);
+}
 function syncButtons(){
   const has=queue.length>0;
   [btnApplyOne,btnApplyAll,btnSaveOne,btnSaveAll,btnScanBarcode].forEach(el=>el.disabled=!has);
@@ -677,6 +714,12 @@ function syncButtons(){
     barcodeResult.value='';
     btnDownloadBarcodeTxt.disabled=true;
   }
+  updateGalleryActions();
+}
+function updateGalleryActions(){
+  const has=gallery.length>0;
+  btnGallerySaveAll.disabled=!has;
+  btnGalleryShare.disabled=!has;
 }
 
 async function scanBarcode(){
@@ -760,6 +803,8 @@ handleInput(fileInput);
 clearQueueBtn.addEventListener('click',()=>{queue=[];activeIdx=-1;showEmpty();syncButtons();toast('Antrian dikosongkan.');});
 btnScanBarcode.addEventListener('click',scanBarcode);
 btnDownloadBarcodeTxt.addEventListener('click',downloadBarcodeTxt);
+btnGallerySaveAll.addEventListener('click',saveAllGallery);
+btnGalleryShare.addEventListener('click',shareGallery);
 
 // LOGO
 logoInput.addEventListener('change',()=>{
@@ -788,7 +833,7 @@ btnApplyAll.addEventListener('click',applyToAll);
 btnSaveOne.addEventListener('click',saveActive);
 btnSaveAll.addEventListener('click',saveAll);
 
-function addToGallery(dataURL,filename){
+function addToGallery(dataURL,filename,notify=true){
   gallery.push({dataURL,filename});
   headerCount.textContent=gallery.length+' foto';
   if(gallery.length===1){galleryGrid.style.display='';galleryEmpty.style.display='none';galleryGrid.innerHTML='';}
@@ -800,6 +845,8 @@ function addToGallery(dataURL,filename){
     const a=document.createElement('a');a.href=dataURL;a.download=filename;a.click();
   });
   galleryGrid.appendChild(div);
+  updateGalleryActions();
+  if(notify)toast('Gambar ditambahkan ke Galeri.');
 }
 
 syncButtons();
