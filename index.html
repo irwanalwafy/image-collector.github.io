@@ -192,7 +192,7 @@ label.btn input[type=file]{display:none;}
         <p style="margin:0 0 10px;color:var(--text3);font-size:13px;">Gunakan tombol ini untuk memindai barcode/QR dari foto yang dipilih.</p>
         <button class="btn full" id="btnScanBarcode" disabled>🔍 Scan Barcode</button>
         <textarea id="barcodeResult" readonly placeholder="Hasil scan akan muncul di sini..." style="width:100%;min-height:110px;margin-top:12px;border:1px solid var(--border);border-radius:14px;padding:12px;background:var(--surface2);color:var(--text);resize:vertical;font-size:14px;line-height:1.5;"></textarea>
-        <button class="btn full success" id="btnDownloadBarcodeTxt" disabled style="margin-top:10px;">💾 Simpan Hasil ke TXT</button>
+        <button class="btn full success" id="btnDownloadBarcodeTxt" disabled style="margin-top:10px;">� Simpan Hasil ke Galeri</button>
       </div>
     </div>
 
@@ -812,16 +812,11 @@ function downloadBarcodeTxt(){
     toast('Tidak ada teks barcode untuk disimpan.');
     return;
   }
-  const blob=new Blob([text],{type:'text/plain'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');
-  a.href=url;
-  a.download=`barcode_${Date.now()}.txt`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-  toast('Hasil barcode disimpan ke TXT.');
+  const encoded=btoa(unescape(encodeURIComponent(text)));
+  const dataURL=`data:text/plain;base64,${encoded}`;
+  const filename=`barcode_${Date.now()}.txt`;
+  addToGallery(dataURL,filename,true);
+  toast('Hasil barcode disimpan ke Galeri.');
 }
 
 // FILE INPUTS — sequential read
