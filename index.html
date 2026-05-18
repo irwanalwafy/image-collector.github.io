@@ -697,13 +697,18 @@ async function saveAllGallery(){
   }
 }
 
+function canShareFiles(files){
+  if(navigator.canShare) return navigator.canShare({files});
+  return true;
+}
+
 async function shareGallery(){
   if(!gallery.length){toast('Galeri kosong.');return;}
   if(!navigator.share){toast('Share tidak tersedia di perangkat ini.');return;}
   try{
     if(gallery.length===1){
       const file = dataURLToFile(gallery[0].dataURL,gallery[0].filename);
-      if(navigator.canShare && navigator.canShare({files:[file]})){
+      if(canShareFiles([file])){
         await navigator.share({files:[file], title:'Galeri Image Collector', text:'Berbagi 1 gambar dari Galeri.'});
       } else {
         await navigator.share({title:'Galeri Image Collector', text:'Galeri berisi 1 gambar.'});
@@ -711,12 +716,33 @@ async function shareGallery(){
       return;
     }
     const zipFile = await createGalleryZip();
-    if(navigator.canShare && navigator.canShare({files:[zipFile]})){
+    if(canShareFiles([zipFile])){
       await navigator.share({files:[zipFile], title:'Galeri Image Collector', text:`Berbagi ${gallery.length} gambar dalam satu ZIP.`});
     } else {
       toast('Share ZIP tidak didukung di perangkat ini.');
     }
-  }catch(err){toast('Gagal share: '+err.message);}
+  }catch(err){
+    if(err && (/permission denied/i.test(err.message) || err.name==='NotAllowedError' || err.name==='AbortError')){
+      toast('Share ditolak. Menyimpan ZIP sebagai gantinya.');
+      saveZipFallback();
+    } else {
+      toast('Gagal share: '+(err.message||err));
+    }
+  }
+}
+
+function saveZipFallback(){
+  if(!gallery.length)return;
+  createGalleryZip().then(zipFile=>{
+    const url = URL.createObjectURL(zipFile);
+    const a=document.createElement('a');
+    a.href=url;a.download=zipFile.name;
+    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast('ZIP disimpan sebagai file lokal.');
+  }).catch(err=>{
+    toast('Gagal membuat ZIP fallback: '+err.message);
+  });
 }
 
 function dataURLToFile(dataurl, filename){
