@@ -131,6 +131,7 @@ label.btn input[type=file]{display:none;}
 .g-thumb{position:relative;aspect-ratio:1;background:var(--surface2);border-radius:4px;overflow:hidden;cursor:pointer;}
 .g-thumb img{width:100%;height:100%;object-fit:cover;display:block;}
 .g-dl{position:absolute;bottom:4px;right:4px;background:rgba(0,0,0,.6);border:none;border-radius:4px;padding:4px 7px;cursor:pointer;color:#fff;font-size:11px;}
+.g-del{position:absolute;top:4px;right:4px;width:24px;height:24px;background:rgba(192,57,43,.75);border:none;border-radius:50%;color:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;}
 .gallery-empty{text-align:center;padding:48px 16px;color:var(--text3);font-size:14px;}
 .gallery-empty svg{margin:0 auto 12px;display:block;opacity:.25;}
 
@@ -330,6 +331,9 @@ label.btn input[type=file]{display:none;}
         <button class="btn sm success" id="btnGallerySaveAll" disabled>💾 Simpan Semua</button>
         <button class="btn sm primary" id="btnGalleryShare" disabled>📤 Share</button>
       </div>
+      <div class="batch-grid" style="margin-bottom:10px;">
+        <button class="btn sm danger-outline" id="btnGalleryDeleteAll" disabled>🗑️ Hapus Semua</button>
+      </div>
       <div id="galleryEmpty" class="gallery-empty">
         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
         Belum ada foto tersimpan.
@@ -381,6 +385,7 @@ const btnSaveOne=document.getElementById('btnSaveOne');
 const btnSaveAll=document.getElementById('btnSaveAll');
 const btnGallerySaveAll=document.getElementById('btnGallerySaveAll');
 const btnGalleryShare=document.getElementById('btnGalleryShare');
+const btnGalleryDeleteAll=document.getElementById('btnGalleryDeleteAll');
 const progressWrap=document.getElementById('progressWrap');
 const progressFill=document.getElementById('progressFill');
 const progressLbl=document.getElementById('progressLbl');
@@ -753,6 +758,7 @@ function updateGalleryActions(){
   const has=gallery.length>0;
   btnGallerySaveAll.disabled=!has;
   btnGalleryShare.disabled=!has;
+  btnGalleryDeleteAll.disabled=!has;
 }
 
 async function scanBarcode(){
@@ -838,6 +844,7 @@ btnScanBarcode.addEventListener('click',scanBarcode);
 btnDownloadBarcodeTxt.addEventListener('click',downloadBarcodeTxt);
 btnGallerySaveAll.addEventListener('click',saveAllGallery);
 btnGalleryShare.addEventListener('click',shareGallery);
+btnGalleryDeleteAll.addEventListener('click',deleteAllGallery);
 
 // LOGO
 logoInput.addEventListener('change',()=>{
@@ -867,19 +874,71 @@ btnSaveOne.addEventListener('click',saveActive);
 btnSaveAll.addEventListener('click',saveAll);
 
 function addToGallery(dataURL,filename,notify=true){
-  gallery.push({dataURL,filename});
+  const id=Math.random().toString(36).slice(2);
+  gallery.push({id,dataURL,filename});
   headerCount.textContent=gallery.length+' foto';
   if(gallery.length===1){galleryGrid.style.display='';galleryEmpty.style.display='none';galleryGrid.innerHTML='';}
   const div=document.createElement('div');div.className='g-thumb';
-  div.innerHTML=`<img src="${dataURL}" alt="${filename}"><button class="g-dl">↓</button>`;
+  div.innerHTML=`<img src="${dataURL}" alt="${filename}"><button class="g-dl">↓</button><button class="g-del">×</button>`;
   div.querySelector('img').addEventListener('click',()=>addToQueue([dataURL]));
   div.querySelector('.g-dl').addEventListener('click',e=>{
     e.stopPropagation();
     const a=document.createElement('a');a.href=dataURL;a.download=filename;a.click();
   });
+  div.querySelector('.g-del').addEventListener('click',e=>{
+    e.stopPropagation();
+    deleteFromGallery(id);
+  });
   galleryGrid.appendChild(div);
   updateGalleryActions();
   if(notify)toast('Gambar ditambahkan ke Galeri.');
+}
+
+function deleteFromGallery(id){
+  const idx=gallery.findIndex(item=>item.id===id);
+  if(idx===-1)return;
+  gallery.splice(idx,1);
+  headerCount.textContent=gallery.length+' foto';
+  if(gallery.length===0){
+    galleryGrid.innerHTML='';
+    galleryGrid.style.display='none';
+    galleryEmpty.style.display='';
+  }else{
+    renderGallery();
+  }
+  updateGalleryActions();
+  toast('Gambar dihapus dari Galeri.');
+}
+
+function deleteAllGallery(){
+  if(!gallery.length)return;
+  if(confirm(`Yakin hapus semua ${gallery.length} gambar dari Galeri?`)){
+    gallery=[];
+    headerCount.textContent='0 foto';
+    galleryGrid.innerHTML='';
+    galleryGrid.style.display='none';
+    galleryEmpty.style.display='';
+    updateGalleryActions();
+    toast('Semua gambar dihapus dari Galeri.');
+  }
+}
+
+function renderGallery(){
+  galleryGrid.innerHTML='';
+  gallery.forEach(item=>{
+    const div=document.createElement('div');div.className='g-thumb';
+    div.innerHTML=`<img src="${item.dataURL}" alt="${item.filename}"><button class="g-dl">↓</button><button class="g-del">×</button>`;
+    div.querySelector('img').addEventListener('click',()=>addToQueue([item.dataURL]));
+    div.querySelector('.g-dl').addEventListener('click',e=>{
+      e.stopPropagation();
+      const a=document.createElement('a');a.href=item.dataURL;a.download=item.filename;a.click();
+    });
+    div.querySelector('.g-del').addEventListener('click',e=>{
+      e.stopPropagation();
+      deleteFromGallery(item.id);
+    });
+    galleryGrid.appendChild(div);
+  });
 }
 
 syncButtons();
