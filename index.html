@@ -11,7 +11,6 @@
 <title>Image Collector</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon-192.png">
-<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <style>
 :root {
   --bg:#0f0f0f;--surface:#1a1a1a;--surface2:#242424;--surface3:#2e2e2e;
@@ -677,72 +676,52 @@ function moveAllQueueToGallery(){
   toast('Semua gambar dipindahkan ke Galeri.');
 }
 
-async function saveAllGallery(){
-  if(!gallery.length)return;
-  if(gallery.length===1){
-    downloadDataURL(gallery[0].dataURL,gallery[0].filename);
-    toast('1 gambar diunduh dari Galeri.');
-    return;
-  }
-  try{
-    const zipFile = await createGalleryZip();
-    const url = URL.createObjectURL(zipFile);
-    const a=document.createElement('a');
-    a.href=url;a.download=zipFile.name;
-    document.body.appendChild(a);a.click();document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    toast(`${gallery.length} gambar disimpan dalam ${zipFile.name}.`);
-  }catch(err){
-    toast('Gagal membuat ZIP: '+err.message);
-  }
+async function promptFileName(){
+  return new Promise((resolve)=>{
+    const name=prompt('Masukkan nama file (tanpa ekstensi):');
+    if(!name||!name.trim()){
+      toast('Nama file harus diisi.');
+      resolve(null);
+    }else{
+      resolve(name.trim());
+    }
+  });
 }
 
-function canShareFiles(files){
-  if(navigator.canShare) return navigator.canShare({files});
-  return true;
+async function saveAllGallery(){
+  if(!gallery.length)return;
+  const baseName=await promptFileName();
+  if(!baseName)return;
+  gallery.forEach((item,i)=>{
+    let filename=baseName+'.jpg';
+    if(gallery.length>1)filename=baseName+'_'+(i+1)+'.jpg';
+    downloadDataURL(item.dataURL,filename);
+  });
+  toast(gallery.length===1?'1 gambar diunduh.':'Semua gambar diunduh dengan sequence number.');
 }
 
 async function shareGallery(){
   if(!gallery.length){toast('Galeri kosong.');return;}
   if(!navigator.share){toast('Share tidak tersedia di perangkat ini.');return;}
+  const baseName=await promptFileName();
+  if(!baseName)return;
+  const files=[];
+  gallery.forEach((item,i)=>{
+    let filename=baseName+'.jpg';
+    if(gallery.length>1)filename=baseName+'_'+(i+1)+'.jpg';
+    const file=dataURLToFile(item.dataURL,filename);
+    files.push(file);
+  });
   try{
-    if(gallery.length===1){
-      const file = dataURLToFile(gallery[0].dataURL,gallery[0].filename);
-      if(canShareFiles([file])){
-        await navigator.share({files:[file], title:'Galeri Image Collector', text:'Berbagi 1 gambar dari Galeri.'});
-      } else {
-        await navigator.share({title:'Galeri Image Collector', text:'Galeri berisi 1 gambar.'});
-      }
-      return;
-    }
-    const zipFile = await createGalleryZip();
-    if(canShareFiles([zipFile])){
-      await navigator.share({files:[zipFile], title:'Galeri Image Collector', text:`Berbagi ${gallery.length} gambar dalam satu ZIP.`});
-    } else {
-      toast('Share ZIP tidak didukung di perangkat ini.');
-    }
+    await navigator.share({files:files,title:'Galeri Image Collector',text:`Berbagi ${files.length} gambar dari Galeri.`});
+    toast('Share berhasil.');
   }catch(err){
-    if(err && (/permission denied/i.test(err.message) || err.name==='NotAllowedError' || err.name==='AbortError')){
-      toast('Share ditolak. Menyimpan ZIP sebagai gantinya.');
-      saveZipFallback();
-    } else {
+    if(err.name==='AbortError'){
+      toast('Share dibatalkan.');
+    }else{
       toast('Gagal share: '+(err.message||err));
     }
   }
-}
-
-function saveZipFallback(){
-  if(!gallery.length)return;
-  createGalleryZip().then(zipFile=>{
-    const url = URL.createObjectURL(zipFile);
-    const a=document.createElement('a');
-    a.href=url;a.download=zipFile.name;
-    document.body.appendChild(a);a.click();document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    toast('ZIP disimpan sebagai file lokal.');
-  }).catch(err=>{
-    toast('Gagal membuat ZIP fallback: '+err.message);
-  });
 }
 
 function dataURLToFile(dataurl, filename){
@@ -755,16 +734,7 @@ function dataURLToFile(dataurl, filename){
   return new File([u8arr], filename, {type:mime});
 }
 
-async function createGalleryZip(){
-  if(typeof JSZip==='undefined')throw new Error('JSZip belum dimuat.');
-  const zip = new JSZip();
-  gallery.forEach(item=>{
-    const base64 = item.dataURL.split(',')[1];
-    zip.file(item.filename, base64, {base64:true});
-  });
-  const blob = await zip.generateAsync({type:'blob'});
-  return new File([blob], `gallery_${Date.now()}.zip`, {type:'application/zip'});
-}
+
 
 function setBusy(b){
   [btnApplyOne,btnApplyAll,btnSaveOne,btnSaveAll,btnScanBarcode,btnDownloadBarcodeTxt].forEach(el=>el.disabled=b||!queue.length);
