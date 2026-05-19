@@ -974,8 +974,8 @@ window.addEventListener('popstate',()=>{
   backPressCount++;
   if(backPressCount===1){
     window.history.pushState(null,null,window.location.href);
-    toast('Tap tombol back 2x untuk keluar aplikasi');
-    backPressTimer=setTimeout(()=>{backPressCount=0;},2000);
+    toast('Tap tombol back 2x dengan cepat untuk keluar');
+    backPressTimer=setTimeout(()=>{backPressCount=0;},1000);
   }else if(backPressCount===2){
     clearTimeout(backPressTimer);
     window.history.back();
