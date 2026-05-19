@@ -967,6 +967,21 @@ function renderGallery(){
   });
 }
 
+// Back button handler - double tap to exit
+let backPressCount=0;let backPressTimer;
+window.history.pushState(null,null,window.location.href);
+window.addEventListener('popstate',()=>{
+  backPressCount++;
+  if(backPressCount===1){
+    window.history.pushState(null,null,window.location.href);
+    toast('Tap tombol back 2x untuk keluar aplikasi');
+    backPressTimer=setTimeout(()=>{backPressCount=0;},2000);
+  }else if(backPressCount===2){
+    clearTimeout(backPressTimer);
+    window.history.back();
+  }
+});
+
 syncButtons();
 if('serviceWorker' in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});
 </script>
